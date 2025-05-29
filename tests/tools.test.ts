@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Tools } from '../src/tools';
 import { OpenAPIV3 } from 'openapi-types';
 import { CedarOpenAPIExtension } from '../src';
+import fc from 'fast-check';
 
 describe('generateApiMappingSchemaFromOpenAPISpec', () => {
     it('should generate a schema from a simple OpenAPI spec', () => {
@@ -83,6 +84,30 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         expect(actions.getUsers).toBeDefined();
         expect(actions.createUser).toBeDefined();
         expect(actions.getUserById).toBeDefined();
+
+        // Check action context
+        expect(actions.getUserById.appliesTo).toStrictEqual({
+            principalTypes: ['User'],
+            resourceTypes: ['User'],
+            context: {
+                type: 'Record',
+                attributes: {
+                    pathParameters: {
+                        type: 'Record',
+                        attributes: {
+                            id: {
+                                type: 'String',
+                                required: true
+                            }
+                        },
+                    },
+                    queryStringParameters: {
+                        type: 'Record',
+                        attributes: {},
+                    }
+                }
+            }
+        }); 
 
         // Check action annotations
         expect(actions.getUsers.annotations.httpVerb).toBe('get');
@@ -346,6 +371,100 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         });
     });
     
+    function getOpenApiDocWithInvalidTypeParam(paramType: OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject): OpenAPIV3.Document {
+        const spec: OpenAPIV3.Document = {
+            openapi: '3.0.0',
+            info: {
+                title: 'Test API',
+                version: '1.0.0'
+            },
+            paths: {
+                '/test': {
+                    get: {
+                        operationId: 'test',
+                        parameters: [
+                            paramType,
+                        ],
+                        responses: {
+                            '200': {
+                                description: 'Success'
+                            }
+                        }
+                    }
+                }
+            },
+            components: {
+                schemas: {
+                    MySchema: {
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string'
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        return spec;
+    }
 
+    it('should error if a list of OpenApi parameters contains a direct $ref', () => {
+        const spec = getOpenApiDocWithInvalidTypeParam({$ref: '#/components/schemas/MySchema'});
 
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+        }).toThrow('OpenAPI parameters directly defined as $ref\'s are not supported');
+    });
+
+    it('should error if a list of OpenApi parameters contains a parameter with oneOf type', () => {
+        const spec = getOpenApiDocWithInvalidTypeParam({
+            name: 'x',
+            in: 'path',
+            schema: {
+                oneOf: [
+                    {type: 'string'},
+                    {type: 'number'},
+                ]
+            }
+        });
+
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+        }).toThrow();
+    });
+
+    it('should error if a list of OpenApi parameters contains a parameter with anyOf type', () => {
+        const spec = getOpenApiDocWithInvalidTypeParam({
+            name: 'x',
+            in: 'path',
+            schema: {
+                anyOf: [
+                    {type: 'string'},
+                    {type: 'number'},
+                ]
+            }
+        });
+
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+        }).toThrow();
+    });
+
+    it('should error if a list of OpenApi parameters contains a parameter with allOf type', () => {
+        const spec = getOpenApiDocWithInvalidTypeParam({
+            name: 'x',
+            in: 'path',
+            schema: {
+                allOf: [
+                    {type: 'string'},
+                    {type: 'number'},
+                ]
+            }
+        });
+
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+        }).toThrow();
+    });
 });
