@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { OpenAPIV3 } from 'openapi-types';
 import { Tools } from '../src/tools'; 
@@ -22,9 +22,9 @@ const arbOpenApiSinglePathDef = fc.record({
     ),
 });
 
-const arbAttribute =  fc.letrec(tie => {
+const arbAttribute = fc.letrec(tie => {
     return {
-        actualVal: fc.oneof(tie('primitive'), tie('array'), tie('object'), tie('$ref')),
+        actualVal: fc.oneof({maxDepth: 6}, tie('primitive'), tie('array'), tie('object'), tie('$ref')),
         primitive: fc.record({
             type: fc.constantFrom('number', 'integer', 'boolean', 'string'),
         }),
@@ -82,6 +82,7 @@ const arbOpenApiSchemaRecord = fc.dictionary(
 
 describe('schema generation proptests', () => {
     it('should generate the correct number of actions for an arb schema', () => {
+        console.log('should generate the correct number of actions for an arb schema...')
         fc.assert(
             fc.property(
                 fc.uniqueArray(
@@ -131,6 +132,7 @@ describe('schema generation proptests', () => {
 
     
     it('should convert all OpenAPI schemas to commonTypes', () =>{
+        console.log('should convert all OpenAPI schemas to commonTypes...');
         fc.assert(
             fc.property(
                 arbOpenApiSchemaRecord,
@@ -178,5 +180,125 @@ describe('schema generation proptests', () => {
                 }
             )
         )
+    });
+
+    it('should convert corectly between a list of OpenAPI parameters and cedar context definition', () => {
+        console.log('should convert corectly between a list of OpenAPI parameters and cedar context definition...');
+        const lowerCase = 'abcdefghijklmnopqrstuvwxyz';
+        const chars = lowerCase + lowerCase.toUpperCase();
+        const arbName = () => fc.string({minLength: 4, maxLength: 16, unit: fc.constantFrom(...chars)});
+        const arbType = () => fc.constantFrom('path', 'query', 'header', 'cookie');
+        const arbSchema = () => fc.constantFrom(
+            'str',
+            'strUuid',
+            'int',
+            'num',
+            'bool',
+            'array|str',
+            'array|bool',
+            'array|int',
+            'refPerson',
+            'objectBook',
+        );
+        
+        fc.assert(
+            fc.property(fc.gen(), g => {
+                const numberOfParameters = g(() => fc.integer({min: 8, max: 30}));
+                const openApiParameters: OpenAPIV3.ParameterObject[] = [];
+                const generatedCedarContextDefinition = {
+                    pathParameters: {
+                        type: 'Record',
+                        attributes: {},
+                    },
+                    queryStringParameters: {
+                        type: 'Record',
+                        attributes: {},
+                    },
+                };
+                for (let i = 0; i < numberOfParameters; i++) {
+                    const attrName = g(arbName);
+                    const paramType = g(arbType);
+                    const schemaType = g(arbSchema);
+                    const openApiParameterObject: OpenAPIV3.ParameterObject = {
+                        name:attrName,
+                        in: paramType as unknown as string,
+                        schema: (function(){
+                            switch(schemaType) {
+                                case 'str': return {type: 'string'};
+                                case 'strUuid': return {type: 'string', format: 'uuid'};
+                                case 'int': return {type: 'integer'};
+                                case 'num': return {type: 'number'};
+                                case 'bool': return {type: 'boolean'};
+                                case 'array|str': return {type: 'array', items: {type: 'string'}}
+                                case 'array|bool': return {type: 'array', items: {type: 'boolean'}}
+                                case 'array|int': return {type: 'array', items: {type: 'integer'}}
+                                case 'refPerson': return {'$ref': '#/components/schemas/Person'};
+                                case 'objectBook': return {
+                                    type: 'object',
+                                    properties: {
+                                        email: {type: 'string', format: 'email'},
+                                        firstName: {type: 'string'},
+                                        lastName: {type: 'string'},
+                                        age: {type: 'integer'},
+                                        income: {type: 'number'},
+                                    },
+                                }
+                            }
+                        })(),
+                    }
+                    openApiParameters.push(openApiParameterObject);
+                    const cedarContextAttribute = (function(){
+                            switch(schemaType) {
+                                case 'str': return {type: 'String'};
+                                case 'strUuid': return {type: 'String'};
+                                case 'int': return {type: 'Long'};
+                                case 'num': return {type: 'Long'};
+                                case 'bool': return {type: 'Boolean'};
+                                case 'array|str': return {type: 'Set', element: {type: 'String'}}
+                                case 'array|bool': return {type: 'Set', element: {type: 'Boolean'}}
+                                case 'array|int': return {type: 'Set', element: {type: 'Long'}}
+                                case 'refPerson': return {type: 'Person'};
+                                case 'objectBook': return {
+                                    type: 'Record',
+                                    attributes: {
+                                        email: {type: 'String'},
+                                        firstName: {type: 'String'},
+                                        lastName: {type: 'String'},
+                                        age: {type: 'Long'},
+                                        income: {type: 'Long'},
+                                    },
+                                }
+                            }
+                        })();
+                    if (paramType === 'path' as const) {
+                        Object.assign(generatedCedarContextDefinition.pathParameters.attributes, {
+                            [attrName]: cedarContextAttribute,
+                        });
+                    } else if (paramType === 'query' as const) {
+                        Object.assign(generatedCedarContextDefinition.queryStringParameters.attributes, {
+                            [attrName]: cedarContextAttribute,
+                        });
+                    }
+                }
+                const convertedFromOpenApiToCedar = Tools._convertOpenApiParametersToContextdefinition(openApiParameters);
+                if (!('attributes' in convertedFromOpenApiToCedar.pathParameters)) {
+                    throw new Error('Test failed! Converted schema path params was not Record type');
+                }
+                if (!('attributes' in convertedFromOpenApiToCedar.queryStringParameters)) {
+                    throw new Error('Test failed! Converted schema query params was not Record type');
+                }
+                expect(
+                    Object.keys(generatedCedarContextDefinition.pathParameters.attributes).sort()
+                ).toStrictEqual(
+                    Object.keys(convertedFromOpenApiToCedar.pathParameters.attributes).sort()
+                );
+                expect(
+                    Object.keys(generatedCedarContextDefinition.queryStringParameters.attributes).sort()
+                ).toStrictEqual(
+                    Object.keys(convertedFromOpenApiToCedar.queryStringParameters.attributes).sort()
+                );
+                expect(generatedCedarContextDefinition).toEqual(convertedFromOpenApiToCedar);
+            })
+        );
     });
 });

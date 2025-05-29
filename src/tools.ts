@@ -1,7 +1,7 @@
-import { SchemaJson, ActionType, CommonType, EntityType, RecordType, Type } from "@cedar-policy/cedar-wasm";
+import { SchemaJson, ActionType, CommonType, EntityType, Type, TypeOfAttribute } from "@cedar-policy/cedar-wasm";
 import { OpenAPIV3 } from 'openapi-types';
 import { get, cloneDeep } from 'lodash';
-import { ApiHttpMethod, CedarOpenAPIExtension, SUPPORTED_HTTP_METHODS, StringifiedSchema } from ".";
+import { CedarOpenAPIExtension, SUPPORTED_HTTP_METHODS, StringifiedSchema } from ".";
 
 
 
@@ -17,12 +17,10 @@ export interface SimpleRestAuthMapping {
 
 export class Tools {
     private static openAPIToCedarPrimitiveTypeMap = {
-        string: {type: 'String'},
-        number: {type: 'Long'},
-        integer: {type: 'Long'},
-        boolean: {type: 'Boolean'},
-        array: {type: 'Set'},
-        object: {type: 'Record', attributes: {}},
+        string: {type: 'String' as const},
+        number: {type: 'Long' as const},
+        integer: {type: 'Long' as const},
+        boolean: {type: 'Boolean' as const},
     }
     /**
      * How action names are computed:
@@ -170,7 +168,7 @@ export class Tools {
         return commonTypes;
     }
 
-    protected static convertSingleOAISchemaToCommonType(schemaName: string, openApiSingleSchema :OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject): Type<string> {
+    protected static convertSingleOAISchemaToCommonType(schemaName: string, openApiSingleSchema: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject): Type<string> {
         if ('$ref' in openApiSingleSchema) {
             const refValue = openApiSingleSchema['$ref'];
             if (typeof refValue !== 'string' || !refValue.startsWith('#/components/schemas/')) {
@@ -178,8 +176,6 @@ export class Tools {
             }
             const refTypeName = refValue.split('/').slice(-1)[0];
             return { type: refTypeName };
-
-
         } else if ('type' in openApiSingleSchema && typeof openApiSingleSchema.type === 'string') {
             switch (openApiSingleSchema.type) {
                 case 'object': {
@@ -201,7 +197,7 @@ export class Tools {
                 }
                 case 'array': {
                     if (!openApiSingleSchema.items ) {
-                        throw new Error(`Unsupported schema for ${schemaName} - array items are not defined directly under the property.`);
+                        throw new Error(`Unsupported schema for ${schemaName} - could not determine the type of the array item`);
                     }
                     return {
                         type: 'Set',
@@ -237,9 +233,13 @@ export class Tools {
                 resourceTypes = cedarExtension.appliesToResourceTypes;
             }
         }
+        let attributes = {};
+        if (Array.isArray(operationObject.parameters)) {
+            attributes = Tools._convertOpenApiParametersToContextdefinition(operationObject.parameters);
+        }
         const actionDefinition: ActionType<string> = {
             appliesTo: {
-                context: { type: 'Record', attributes: {} },
+                context: { type: 'Record', attributes },
                 principalTypes: ['User'],
                 resourceTypes,
             },
@@ -248,6 +248,39 @@ export class Tools {
             actionName,
             actionDefinition,
         };
+    }
+    static _convertOpenApiParametersToContextdefinition(parameters: (OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject)[]): {pathParameters: TypeOfAttribute<string>, queryStringParameters: TypeOfAttribute<string>} {
+        const result = {
+            pathParameters: {
+                type: 'Record',
+                attributes: {},
+            },
+            queryStringParameters: {
+                type: 'Record',
+                attributes: {},
+            },
+        };
+        for (const paramDefn of parameters) {
+            if ('$ref' in paramDefn) {
+                throw new Error('OpenAPI parameters directly defined as $ref\'s are not supported');
+            }
+            if (!paramDefn.name || !paramDefn.in || !paramDefn.schema) {
+                throw new Error('OpenAPI operation parameters must have a "name", "schema", and "in" properties.');
+            }
+            if (!['path', 'query'].includes(paramDefn.in)) {
+                console.warn(`Found unsupported parameter of type ${paramDefn.in}, skipping...`);
+                continue;
+            }
+            const cedarSchemaParamToMerge: Record<string, TypeOfAttribute<string>> = {
+                [paramDefn.name]: Tools.convertSingleOAISchemaToCommonType(paramDefn.name, paramDefn.schema),
+            };
+            if (paramDefn.required) {
+                Object.assign(cedarSchemaParamToMerge[paramDefn.name], { required: true });
+            }
+            const typeOfParam = paramDefn.in === 'path' ? 'pathParameters': 'queryStringParameters';
+            Object.assign(result[typeOfParam].attributes, cedarSchemaParamToMerge);
+        }
+        return result;
     }
 
     protected static buildAdditionalResourceTypesMap(
