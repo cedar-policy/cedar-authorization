@@ -25,7 +25,7 @@ This package provides an interface for an "Authorization Engine" which takes a C
 
 [TODO: link to example]
 
-#### CLI Tools
+#### CLI Toolss
 
 Authorization Engine: Implement authorization checks using Cedar policies
 
