@@ -19,7 +19,7 @@ npm i --save @cedar-policy/cedar-authorization
 
 ### Usage
 
-#### Authorization Engine
+#### Authorization Enginee
 
 This package provides an interface for an "Authorization Engine" which takes a Cedar request and entities, and returns an authorization result.
 
