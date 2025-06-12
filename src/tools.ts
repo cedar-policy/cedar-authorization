@@ -15,6 +15,13 @@ export interface SimpleRestAuthMapping {
     schemaV4: string;
 }
 
+export interface GenerateSchemaFromOpenApiSpecOptions {
+    openApiSpec: OpenAPIV3.Document;
+    namespace: string;
+    mappingType: MappingType;
+    basePath?: string;
+}
+
 export class Tools {
     private static openAPIToCedarPrimitiveTypeMap = {
         string: {type: 'String' as const},
@@ -22,17 +29,23 @@ export class Tools {
         integer: {type: 'Long' as const},
         boolean: {type: 'Boolean' as const},
     }
+    private static sanitizePath(pathStr: string): string {
+        const trimmed = pathStr.split('/')
+            .map(segment => segment.trim())
+            .filter(segment => segment !== '');
+        return `/${trimmed.join('/')}`;
+    }
     /**
      * How action names are computed:
      *  - If your API spec has operation id's then those are used as cedar actions
      *  - Otherwise the action name is the http verb and the path template
      * How resource names are computed:
      *  - For the SimpleRest mapping type, the resource is always {namespace}::Application::"{namespace}"
-     * @param openApiSpec an openapi v3 spec as parsed json
-     * @param namespace cedar namespace for your application
+     * @param options of type GenerateSchemaFromOpenApiSpecOptions. Includes openApiSpec, namespace, mappingType
      * @returns 
      */
-    public static generateApiMappingSchemaFromOpenAPISpec(openApiSpec: OpenAPIV3.Document, namespace: string, mappingType: MappingType): AuthMapping {
+    public static generateApiMappingSchemaFromOpenAPISpec(options: GenerateSchemaFromOpenApiSpecOptions): AuthMapping {
+        const {openApiSpec, namespace, mappingType} = options;
         if (!openApiSpec.paths) {
             throw new Error('Invalid OpenAPI spec - missing paths object');
         }
@@ -40,6 +53,33 @@ export class Tools {
         if (!namespace) {
             throw new Error('Invalid input - missing namespace');
         }
+        const servers = openApiSpec.servers;
+
+        if (options.basePath && Array.isArray(servers)) {
+            const basePathExistsInServersArray = servers
+                .map(server => server.url || '')
+                .some(serverUrl => {
+                    const normalizedBasePath = this.sanitizePath(options.basePath || '');
+                    return serverUrl.endsWith(normalizedBasePath) || serverUrl.endsWith(`${normalizedBasePath}/`)
+                });
+            if (!basePathExistsInServersArray) {
+                throw new Error('Base Path option was provided but it does not match any of the `servers` entries in the API spec.');
+            }
+        }
+
+        let basePath = '';
+        if (Array.isArray(servers)) {
+            if (servers.length > 1) {
+                if (!options.basePath) {
+                    throw new Error('Invalid input. API spec specifies more than one `server` entry. Server Base Path parameter required for disambiguation.');
+                }
+                basePath = this.sanitizePath(options.basePath);
+            } else if (servers.length === 1) {
+                const fullBaseUrl = new URL(servers[0].url);
+                basePath = this.sanitizePath(fullBaseUrl.pathname);
+            }
+        }
+        
     
         const RESERVED_WORDS = ['if', 'in', 'is', '__cedar']; 
         const schemaNamespaceRegex = /^[_a-zA-Z][_a-zA-Z0-9]*(?:::(?:[_a-zA-Z][_a-zA-Z0-9]*))*$/;
@@ -100,6 +140,7 @@ export class Tools {
                 if (!operationObject) {
                     continue;
                 }
+                const httpPathTemplateWithBasePath = `${basePath}${httpPathTemplate}`;
                 const {actionName, actionDefinition} = Tools.generateActionDefinitionFromOperationObject(
                     httpVerb,
                     httpPathTemplate,
@@ -112,7 +153,7 @@ export class Tools {
                         ...actionDefinition,
                         annotations: {
                             httpVerb,
-                            httpPathTemplate,
+                            httpPathTemplate: httpPathTemplateWithBasePath,
                         }
                     },
 
@@ -231,6 +272,8 @@ export class Tools {
                 cedarExtension.appliesToResourceTypes.every((value) => typeof value === 'string');
             if (isValidValue) {
                 resourceTypes = cedarExtension.appliesToResourceTypes;
+            } else {
+                throw new Error(`Invalid x-cedar extension in operation definition for ${httpVerb} ${httpPathTemplate}`);
             }
         }
         let attributes = {};
