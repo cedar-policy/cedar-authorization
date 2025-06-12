@@ -26,6 +26,8 @@ jobs:
           run: |
             git secrets --scan-history
 
+        - name: Check for vulnerabilities
+          run: npm audit
 
         - run: npm ci
         - name: Build the library
