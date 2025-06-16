@@ -5,7 +5,7 @@ import { CedarOpenAPIExtension } from '../src';
 import fc from 'fast-check';
 
 describe('generateApiMappingSchemaFromOpenAPISpec', () => {
-    it('should generate a schema from a simple OpenAPI spec', () => {
+    it('should generate a schema from a simple OpenAPI spec, and support basePath', () => {
         // Create a simple OpenAPI spec for testing
         const openApiSpec: OpenAPIV3.Document<CedarOpenAPIExtension> = {
             openapi: '3.0.0',
@@ -62,7 +62,7 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         const mappingType = 'SimpleRest';
 
         // Generate the schema
-        const result = Tools.generateApiMappingSchemaFromOpenAPISpec(openApiSpec, namespace, mappingType);
+        const result = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
 
         // Verify the result
         expect(result).toBeDefined();
@@ -107,7 +107,7 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
                     }
                 }
             }
-        }); 
+        });
 
         // Check action annotations
         expect(actions.getUsers.annotations.httpVerb).toBe('get');
@@ -117,6 +117,131 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
 
         // Check resource override
         expect(actions.getUserById.appliesTo?.resourceTypes).toEqual(['User']);
+    });
+
+    const openApiSpec: OpenAPIV3.Document<CedarOpenAPIExtension> = {
+        openapi: '3.0.0',
+        info: {
+            title: 'Test API',
+            version: '1.0.0'
+        },
+        servers: [
+            {
+                url: 'http://my.cool.domain.com/api/v1/'
+            }
+        ],
+        paths: {
+            '/users': {
+                get: {
+                    operationId: 'getUsers',
+                    responses: {
+                        '200': {
+                            description: 'Success'
+                        }
+                    }
+                },
+                post: {
+                    operationId: 'createUser',
+                    responses: {
+                        '201': {
+                            description: 'Created'
+                        }
+                    }
+                }
+            },
+            '/users/{id}': {
+                get: {
+                    operationId: 'getUserById',
+                    'x-cedar': {
+                        appliesToResourceTypes: ['User']
+                    },
+                    parameters: [
+                        {
+                            name: 'id',
+                            in: 'path',
+                            required: true,
+                            schema: {
+                                type: 'string'
+                            }
+                        }
+                    ],
+                    responses: {
+                        '200': {
+                            description: 'Success'
+                        }
+                    }
+                }
+            }
+        }
+    };
+    it('should generate a schema from a simple OpenAPI spec, and support basePath without specifying it from cli if there is only one servers entry', () => {
+        const namespace = 'TestAPI';
+        const mappingType = 'SimpleRest';
+
+        // iterate it twice to run the same test with and without a trailing slash in the url
+        for (const testCase of [1, 2]) {
+            if (testCase === 2 && openApiSpec.servers?.[0]) {
+                 openApiSpec.servers[0] = {
+                    url: 'http://my.cool.domain.com/api/v1'
+                 };
+            }
+            // Generate the schema
+            const result = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
+
+            // Verify the result
+            expect(result).toBeDefined();
+            expect(result.mappingType).toBe('SimpleRest');
+            const parsedSchema = JSON.parse(result.schemaV4);
+            expect(parsedSchema).toBeDefined();
+            expect(parsedSchema[namespace]).toBeDefined();
+
+            // Check entity types
+            const entityTypes = parsedSchema[namespace].entityTypes;
+            expect(entityTypes).toBeDefined();
+            expect(entityTypes.User).toBeDefined();
+            expect(entityTypes.UserGroup).toBeDefined();
+            expect(entityTypes.Application).toBeDefined();
+
+            // Check actions
+            const actions = parsedSchema[namespace].actions;
+            expect(actions).toBeDefined();
+            expect(actions.getUsers).toBeDefined();
+            expect(actions.createUser).toBeDefined();
+            expect(actions.getUserById).toBeDefined();
+
+            // Check action context
+            expect(actions.getUserById.appliesTo).toStrictEqual({
+                principalTypes: ['User'],
+                resourceTypes: ['User'],
+                context: {
+                    type: 'Record',
+                    attributes: {
+                        pathParameters: {
+                            type: 'Record',
+                            attributes: {
+                                id: {
+                                    type: 'String',
+                                    required: true
+                                }
+                            },
+                        },
+                        queryStringParameters: {
+                            type: 'Record',
+                            attributes: {},
+                        }
+                    }
+                }
+            });
+
+            // Check action annotations
+            expect(actions.getUsers.annotations.httpVerb).toBe('get');
+            expect(actions.getUsers.annotations.httpPathTemplate).toBe('/api/v1/users');
+            expect(actions.createUser.annotations.httpVerb).toBe('post');
+            expect(actions.getUserById.annotations.httpPathTemplate).toBe('/api/v1/users/{id}');
+
+            // Check resource override
+            expect(actions.getUserById.appliesTo?.resourceTypes).toEqual(['User']);
+        }
     });
 
     it('should generate a schema with commonTypes for an openApi spec with openAPI schemas', () => {
@@ -196,14 +321,14 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
                         type: 'boolean'
                     }
                 }
-            }            
+            }
         };
 
         const namespace = 'TestAPI';
         const mappingType = 'SimpleRest';
 
         // Generate the schema
-        const result = Tools.generateApiMappingSchemaFromOpenAPISpec(openApiSpec, namespace, mappingType);
+        const result = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
 
         // Verify the result
         expect(result).toBeDefined();
@@ -229,7 +354,7 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             'UserGroup',
         ]);
         expect(parsedSchema[namespace].entityTypes.Spine).toBeDefined();
-        expect(parsedSchema[namespace].entityTypes.Spine?.shape).toStrictEqual({type: 'Spine'});
+        expect(parsedSchema[namespace].entityTypes.Spine?.shape).toStrictEqual({ type: 'Spine' });
         expect(parsedSchema[namespace].commonTypes?.Spine?.attributes).toStrictEqual({
             spineprop1: {
                 type: 'Record',
@@ -251,7 +376,7 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         expect(parsedSchema[namespace].actions).toBeDefined();
         expect(Object.keys(parsedSchema[namespace].actions).sort()).toStrictEqual([
             'getUsers',
-        ]); 
+        ]);
         expect(parsedSchema[namespace].actions.getUsers.appliesTo.resourceTypes).toStrictEqual(['Spine']);
     });
 
@@ -265,7 +390,11 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         };
 
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(invalidSpec as OpenAPIV3.Document, 'TestAPI', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: invalidSpec as OpenAPIV3.Document,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
         }).toThrow('Invalid OpenAPI spec - missing paths object');
     });
 
@@ -289,6 +418,52 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         }
     };
 
+    it('should select the correct basePath if many are given, and populate context if there are basePaths', () => {
+        const spec2 = {
+            ...JSON.parse(JSON.stringify(spec)),
+            servers: [
+                { url: 'http://www.club.com/api/v1' },
+                { url: 'http://www.soda.com/api/v2' },
+            ],
+        };
+        spec2.paths['/test'].get.parameters = [];
+        const result = Tools.generateApiMappingSchemaFromOpenAPISpec({
+            openApiSpec: spec2,
+            namespace: 'TestAPI',
+            mappingType: 'SimpleRest',
+            basePath: '/api/v2'
+        });
+        expect(result.schemaV4).toBeDefined();
+        const parsedSchema = JSON.parse(result.schemaV4);
+        expect(parsedSchema).toBeDefined();
+        expect(parsedSchema['TestAPI']).toBeDefined();
+        expect(parsedSchema['TestAPI'].actions).toBeDefined();
+        expect(parsedSchema['TestAPI'].actions.test).toBeDefined();
+        expect(parsedSchema['TestAPI'].actions.test).toStrictEqual({
+            appliesTo: {
+                principalTypes: ['User'],
+                resourceTypes: ['Application'],
+                context: {
+                    type: 'Record',
+                    attributes: {
+                        pathParameters: {
+                            type: 'Record',
+                            attributes: {},
+                        },
+                        queryStringParameters: {
+                            type: 'Record',
+                            attributes: {},
+                        },
+                    },
+                },
+            },
+            annotations: {
+                httpVerb: 'get',
+                httpPathTemplate: '/api/v2/test'
+            }
+        });
+    });
+
     const invalidInputError = 'Invalid namespace format. Namespace must start with a letter or underscore (_), and can include alphanumeric characters and underscores. Double colons (::) can separate components, where each component must start with a letter or underscore. Reserved words cannot be used as namespaces.';
 
     it('should accept valid namespaces', () => {
@@ -305,14 +480,22 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
 
         validNamespaces.forEach(namespace => {
             expect(() => {
-                Tools.generateApiMappingSchemaFromOpenAPISpec(spec, namespace, 'SimpleRest');
+                Tools.generateApiMappingSchemaFromOpenAPISpec({
+                    openApiSpec: spec,
+                    namespace,
+                    mappingType: 'SimpleRest'
+                });
             }).not.toThrow();
         });
     });
 
     it('should throw an error when namespace is missing', () => {
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, '', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec,
+                namespace: '',
+                mappingType: 'SimpleRest'
+            });
         }).toThrow('Invalid input - missing namespace');
     });
 
@@ -328,49 +511,57 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             'a', // Minimum valid namespace
             'VeryLongNamespace' + 'a'.repeat(1000), // Long namespace should be fine
         ];
-    
+
         validNamespaces.forEach(namespace => {
             expect(() => {
-                Tools.generateApiMappingSchemaFromOpenAPISpec(spec, namespace, 'SimpleRest');
+                Tools.generateApiMappingSchemaFromOpenAPISpec({
+                    openApiSpec: spec,
+                    namespace,
+                    mappingType: 'SimpleRest'
+                });
             }).not.toThrow();
         });
     });
-    
+
     it('should throw an error for invalid namespaces', () => {
         const invalidNamespaces = [
             // Invalid starting characters
             '123MyNamespace',
             '@MyNamespace',
-            
+
             // Invalid characters
             'My@Namespace',
             'My Namespace',
             'My-Namespace',
-            
+
             // Invalid :: usage
             'MyNamespace:SubNamespace', // Single colon
             'MyNamespace::',  // Ends with ::
             '::MyNamespace',  // Starts with ::
             'MyNamespace::::SubNamespace', // Multiple ::
             'MyNamespace::123SubNamespace', // Component after :: starts with number
-            
+
             // Special characters
             '@#@',
-            
+
             // Reserved words
             'if',
             'in',
             'is',
             '__cedar',
         ];
-    
+
         invalidNamespaces.forEach(namespace => {
             expect(() => {
-                Tools.generateApiMappingSchemaFromOpenAPISpec(spec, namespace, 'SimpleRest');
+                Tools.generateApiMappingSchemaFromOpenAPISpec({
+                    openApiSpec: spec,
+                    namespace,
+                    mappingType: 'SimpleRest'
+                });
             }).toThrow(invalidInputError);
         });
     });
-    
+
     function getOpenApiDocWithInvalidTypeParam(paramType: OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject): OpenAPIV3.Document {
         const spec: OpenAPIV3.Document = {
             openapi: '3.0.0',
@@ -410,10 +601,14 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
     }
 
     it('should error if a list of OpenApi parameters contains a direct $ref', () => {
-        const spec = getOpenApiDocWithInvalidTypeParam({$ref: '#/components/schemas/MySchema'});
+        const spec = getOpenApiDocWithInvalidTypeParam({ $ref: '#/components/schemas/MySchema' });
 
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
         }).toThrow('OpenAPI parameters directly defined as $ref\'s are not supported');
     });
 
@@ -423,14 +618,18 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             in: 'path',
             schema: {
                 oneOf: [
-                    {type: 'string'},
-                    {type: 'number'},
+                    { type: 'string' },
+                    { type: 'number' },
                 ]
             }
         });
 
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
         }).toThrow();
     });
 
@@ -440,14 +639,18 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             in: 'path',
             schema: {
                 anyOf: [
-                    {type: 'string'},
-                    {type: 'number'},
+                    { type: 'string' },
+                    { type: 'number' },
                 ]
             }
         });
 
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
         }).toThrow();
     });
 
@@ -457,14 +660,53 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             in: 'path',
             schema: {
                 allOf: [
-                    {type: 'string'},
-                    {type: 'number'},
+                    { type: 'string' },
+                    { type: 'number' },
                 ]
             }
         });
 
         expect(() => {
-            Tools.generateApiMappingSchemaFromOpenAPISpec(spec, 'TestAPI', 'SimpleRest');
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
+        }).toThrow();
+    });
+
+    it('should error if you pass more than one server and do not pass serverBasePath', () => {
+        const spec2 = {
+            ...spec,
+            servers: [
+                { url: 'http://www.club.com/api' },
+                { url: 'http://www.soda.com/api' },
+            ],
+        };
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec2,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest'
+            });
+        }).toThrow();
+    });
+
+    it('should error if you pass more than one server and serverBasePath does not match any of the servers', () => {
+        const spec2 = {
+            ...spec,
+            servers: [
+                { url: 'http://www.club.com/api/v1' },
+                { url: 'http://www.soda.com/api/v2' },
+            ],
+        };
+        expect(() => {
+            Tools.generateApiMappingSchemaFromOpenAPISpec({
+                openApiSpec: spec2,
+                namespace: 'TestAPI',
+                mappingType: 'SimpleRest',
+                basePath: '/api/v3'
+            });
         }).toThrow();
     });
 });

@@ -122,7 +122,11 @@ describe('schema generation proptests', () => {
                             };
                         }
                     }
-                    const generatedCedarSchemaStr = Tools.generateApiMappingSchemaFromOpenAPISpec(openApiSpec, 'NS', 'SimpleRest').schemaV4;
+                    const generatedCedarSchemaStr = Tools.generateApiMappingSchemaFromOpenAPISpec({
+                        openApiSpec,
+                        namespace: 'NS',
+                        mappingType: 'SimpleRest',
+                    }).schemaV4;
                     const generatedCedarSchema = JSON.parse(generatedCedarSchemaStr);
                     expect(Object.keys(generatedCedarSchema['NS'].actions).length).to.equal(numActionsInApiSpec);
                 }
@@ -167,7 +171,11 @@ describe('schema generation proptests', () => {
                         }
                     } as OpenAPIV3.Document;
                     
-                    const generatedCedarSchemaStr = Tools.generateApiMappingSchemaFromOpenAPISpec(openApiSpec, 'NS', 'SimpleRest').schemaV4;
+                    const generatedCedarSchemaStr = Tools.generateApiMappingSchemaFromOpenAPISpec({
+                        openApiSpec,
+                        namespace: 'NS',
+                        mappingType: 'SimpleRest',
+                    }).schemaV4;
                     const generatedCedarSchema = JSON.parse(generatedCedarSchemaStr);
 
                     expect(generatedCedarSchema.NS.commonTypes).toBeDefined();

@@ -27,6 +27,11 @@ async function main(): Promise<void> {
             type: 'string',
             default: 'SimpleRest',
             choices: ['SimpleRest'] as const
+          })
+          .option('base-path', {
+            describe: 'The base path of your API. Include the path portion of the url only. ' +
+            'If your API spec has a `servers` entry, this parameter must align with one of the servers in the api spec.',
+            type: 'string'
           });
       })
       .command('generate-policies', 'Generate policies for a Cedar schema', (yargs) => {
@@ -47,6 +52,7 @@ async function main(): Promise<void> {
       const apiSpecFile = argv['api-spec'] as string;
       const namespace = argv.namespace as string;
       const mappingType = argv['mapping-type'] as MappingType;
+      const serverBasePath = typeof argv['base-path'] === 'string' ? argv['base-path'] : undefined;
 
       // Check if API spec file exists
       if (!fs.existsSync(apiSpecFile)) {
@@ -63,11 +69,12 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      const authMapping = Tools.generateApiMappingSchemaFromOpenAPISpec(
+      const authMapping = Tools.generateApiMappingSchemaFromOpenAPISpec({
         openApiSpec,
         namespace,
-        mappingType
-      );
+        mappingType,
+        basePath: serverBasePath,
+    });
       
       const fileNames = ['v2.cedarschema.json', 'v4.cedarschema.json'];
       console.log(`Cedar schema successfully generated. Your schema files are named: ${fileNames.join(', ')}.`);
