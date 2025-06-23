@@ -3,6 +3,8 @@ import fc from 'fast-check';
 import { OpenAPIV3 } from 'openapi-types';
 import { Tools } from '../src/tools'; 
 
+const cedarLib = require('@cedar-policy/cedar-wasm/nodejs');
+
 const lowerCase = 'abcdefghijklmnopqrstuvwxyz';
 const upperCase = lowerCase.toUpperCase();
 const VALID_CHARS = `-_${lowerCase}${upperCase}`.split('');
@@ -129,6 +131,8 @@ describe('schema generation proptests', () => {
                     }).schemaV4;
                     const generatedCedarSchema = JSON.parse(generatedCedarSchemaStr);
                     expect(Object.keys(generatedCedarSchema['NS'].actions).length).to.equal(numActionsInApiSpec);
+                    const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
+                    expect(parseResult.type).to.equal('success');
                 }
             )
         )
@@ -185,6 +189,8 @@ describe('schema generation proptests', () => {
 
                     expect(actualCommonTypes).toStrictEqual(expectedCommonTypes);
 
+                    const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
+                    expect(parseResult.type).to.equal('success');
                 }
             )
         )

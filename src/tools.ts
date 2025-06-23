@@ -188,6 +188,18 @@ export class Tools {
             ...additionalResourcesAsCedar
         };
 
+        // if they have a User CommonType, use that for the User entity:
+        if (commonTypes.User) {
+            schemaNoMappings[namespace].entityTypes.User = {
+                shape: {type: 'User'},
+                memberOfTypes: ['UserGroup'],
+            };
+            schemaWithMappings[namespace].entityTypes.User = {
+                shape: {type: 'User'},
+                memberOfTypes: ['UserGroup'],
+            };
+        }
+
         return {
             mappingType,
             schemaV2: JSON.stringify(schemaNoMappings, null, 2),
@@ -246,7 +258,10 @@ export class Tools {
                     };
                 }
                 default: {
-                    const cedarTypeDef = Tools.openAPIToCedarPrimitiveTypeMap[openApiSingleSchema.type];
+                    const cedarTypeDef = Object.assign(
+                        {},
+                        Tools.openAPIToCedarPrimitiveTypeMap[openApiSingleSchema.type],
+                    );
                     if (!cedarTypeDef) {
                         throw new Error(`Unsupported schema for ${schemaName} - type ${openApiSingleSchema.type} is not supported`);
                     }

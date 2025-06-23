@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Tools } from '../src/tools';
 import { OpenAPIV3 } from 'openapi-types';
 import { CedarOpenAPIExtension } from '../src';
-import fc from 'fast-check';
+const cedarLib = require('@cedar-policy/cedar-wasm/nodejs');
 
 describe('generateApiMappingSchemaFromOpenAPISpec', () => {
     it('should generate a schema from a simple OpenAPI spec, and support basePath', () => {
@@ -181,9 +181,9 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         // iterate it twice to run the same test with and without a trailing slash in the url
         for (const testCase of [1, 2]) {
             if (testCase === 2 && openApiSpec.servers?.[0]) {
-                 openApiSpec.servers[0] = {
+                openApiSpec.servers[0] = {
                     url: 'http://my.cool.domain.com/api/v1'
-                 };
+                };
             }
             // Generate the schema
             const result = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
@@ -319,7 +319,36 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
                     },
                     Skull: {
                         type: 'boolean'
-                    }
+                    },
+                    User: {
+                        type: 'object',
+                        required: ['sub', 'email', 'groups'],
+                        properties: {
+                            sub: {
+                                type: 'string',
+                                example: '12345678-1234-1234-1234-123456789012'
+                            },
+                            email: {
+                                type: 'string',
+                                format: 'email',
+                                example: 'user@example.com'
+                            },
+                            groups: {
+                                type: 'array',
+                                items: {
+                                    type: 'string'
+                                },
+                                example: ['Administrators', 'Users']
+                            },
+                            token: {
+                                type: 'string'
+                            },
+                            tokenType: {
+                                type: 'string',
+                                enum: ['access', 'id']
+                            }
+                        }
+                    },
                 }
             }
         };
@@ -344,7 +373,8 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             'Spine',
             'T1',
             'T2',
-            'T3'
+            'T3',
+            'User'
         ]);
         expect(parsedSchema[namespace].entityTypes).toBeDefined();
         expect(Object.keys(parsedSchema[namespace].entityTypes).sort()).toStrictEqual([
@@ -378,6 +408,11 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             'getUsers',
         ]);
         expect(parsedSchema[namespace].actions.getUsers.appliesTo.resourceTypes).toStrictEqual(['Spine']);
+
+        // now assert that schema parses properly
+        const parseResult = cedarLib.checkParseSchema(parsedSchema);
+        console.log('@@@@', parseResult);
+        expect(parseResult.type).to.equal('success');
     });
 
     it('should throw an error when OpenAPI spec is missing paths', () => {
