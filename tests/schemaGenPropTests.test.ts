@@ -59,14 +59,14 @@ const CEDAR_RESERVED_WORDS = [
 ];
 
 // Custom generator for valid Cedar property names
-const arbValidCedarPropertyName = fc.string({
+const arbValidCommonTypeName = fc.string({
     unit: fc.constantFrom(...lowerCase),
     minLength: 1,
     maxLength: 10,
 }).filter(str => !CEDAR_RESERVED_WORDS.includes(str));
 
 const arbOpenApiSchemaRecord = fc.dictionary(
-    arbValidCedarPropertyName,
+    arbValidCommonTypeName,
     fc.oneof(
         fc.record({
             type: fc.constantFrom('object'),
