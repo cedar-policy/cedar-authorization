@@ -197,7 +197,6 @@ describe('schema generation proptests', () => {
                     const expectedCommonTypes = Object.keys(parsedArbOpenApiSchema).sort();
                     const actualCommonTypes = Object.keys(generatedCedarSchema.NS.commonTypes).sort();
 
-                    console.log('@@@@@', actualCommonTypes, expectedCommonTypes);
                     expect(actualCommonTypes).toStrictEqual(expectedCommonTypes);
 
                     const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
