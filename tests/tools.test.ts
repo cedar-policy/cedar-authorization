@@ -3,8 +3,19 @@ import { Tools } from '../src/tools';
 import { OpenAPIV3 } from 'openapi-types';
 import { CedarOpenAPIExtension } from '../src';
 const cedarLib = require('@cedar-policy/cedar-wasm/nodejs');
+import fs from 'fs';
+import path from 'path';
 
 describe('generateApiMappingSchemaFromOpenAPISpec', () => {
+    it('should be able to parse Trevor\'s API spec from the blog post', () =>{
+        const openApiSpec = JSON.parse(fs.readFileSync(path.join(__dirname, 'apispec.json'), 'utf-8'));
+        const namespace = 'PetStore';
+        const mappingType = 'SimpleRest';
+        const conversionResult = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
+        const parseResult = cedarLib.checkParseSchema(JSON.parse(conversionResult.schemaV4));
+        expect(parseResult.type).to.equal('success');
+    });
+
     it('should generate a schema from a simple OpenAPI spec, and support basePath', () => {
         // Create a simple OpenAPI spec for testing
         const openApiSpec: OpenAPIV3.Document<CedarOpenAPIExtension> = {
@@ -411,7 +422,6 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
 
         // now assert that schema parses properly
         const parseResult = cedarLib.checkParseSchema(parsedSchema);
-        console.log('@@@@', parseResult);
         expect(parseResult.type).to.equal('success');
     });
 
