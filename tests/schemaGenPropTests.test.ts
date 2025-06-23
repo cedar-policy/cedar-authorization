@@ -51,12 +51,22 @@ const arbAttribute = fc.letrec(tie => {
     };
 });
 
+// Cedar reserved words that cannot be used as keys
+const CEDAR_RESERVED_WORDS = [
+    'if', 'then', 'else', 'like', 'in', 'is', '__cedar',
+    'permit', 'forbid', 'when', 'unless', 'has', 'principal',
+    'action', 'resource', 'context'
+];
+
+// Custom generator for valid Cedar property names
+const arbValidCedarPropertyName = fc.string({
+    unit: fc.constantFrom(...lowerCase),
+    minLength: 1,
+    maxLength: 10,
+}).filter(str => !CEDAR_RESERVED_WORDS.includes(str));
+
 const arbOpenApiSchemaRecord = fc.dictionary(
-    fc.string({
-        unit: fc.constantFrom(...lowerCase),
-        minLength: 1,
-        maxLength: 10,
-    }),
+    arbValidCedarPropertyName,
     fc.oneof(
         fc.record({
             type: fc.constantFrom('object'),
@@ -187,6 +197,7 @@ describe('schema generation proptests', () => {
                     const expectedCommonTypes = Object.keys(parsedArbOpenApiSchema).sort();
                     const actualCommonTypes = Object.keys(generatedCedarSchema.NS.commonTypes).sort();
 
+                    console.log('@@@@@', actualCommonTypes, expectedCommonTypes);
                     expect(actualCommonTypes).toStrictEqual(expectedCommonTypes);
 
                     const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
