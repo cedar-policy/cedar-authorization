@@ -23,11 +23,9 @@ npm i --save @cedar-policy/cedar-authorization
 
 This package provides an interface for an "Authorization Engine" which takes a Cedar request and entities, and returns an authorization result.
 
-[TODO: link to example]
+You may find example usages here: https://github.com/cedar-policy/cedar-authorization/blob/main/tests/cedarAuthorizer.test.ts
 
 #### CLI Tools
-
-Authorization Engine: Implement authorization checks using Cedar policies
 
 **Schema Generation: Generate Cedar schemas from OpenAPI specifications**
 
@@ -43,6 +41,48 @@ This will generate two schema files:
 v2.cedarschema.json - Compatible with Cedar 2.x and 3.x
 
 v4.cedarschema.json - Compatible with Cedar 4.x and required by the nodejs Cedar plugins
+
+When generating OpenApi specs, keep the following limitations in mind:
+
+1. Version Support:
+- Only OpenAPI v3 specifications are supported (uses OpenAPIV3 types from openapi-types)
+- Earlier versions (like Swagger 2.0) are not supported
+
+2. Namespace Requirements:
+- Must have exactly one namespace
+- Namespace must follow strict formatting rules:
+  - Must start with a letter or underscore
+  - Can only include alphanumeric characters and underscores
+  - Components can be separated by double colons (::)
+  - Each component must start with a letter or underscore
+- Cannot use reserved words as namespaces ('if', 'in', 'is', '__cedar')
+
+3. Schema Limitations:
+- Only supports local schema references (must start with '#/components/schemas/') - can't link to a separate openApi file or url.
+
+4. Parameter Restrictions for operations:
+- Only supports 'path' and 'query' parameter types
+- Other parameter types (like header, cookie) are skipped with a warning
+- Parameters defined as direct $ref are not supported
+- Parameters must have "name", "schema", and "in" properties
+
+5. Server Configuration:
+- If multiple servers are defined in the OpenAPI spec, a basePath parameter is required
+- The provided basePath must match one of the server entries
+- Server URLs must be valid URLs that can be parsed
+
+6. Operation/Path Requirements:
+- Only supports standard HTTP methods (defined in SUPPORTED_HTTP_METHODS)
+- OPTIONS method is explicitly ignored
+- Each operation must have valid operation objects
+- x-cedar extensions, if present, must have valid appliesToResourceTypes
+
+7. Resource Type Limitations:
+- Default resource types (User, UserGroup, Application) are automatically included
+- Custom resource types must be referenced in action definitions
+- If a resource type is referenced but not defined in schemas, it gets an empty record shape
+
+These limitations mean that complex OpenAPI specs with advanced features like non-standard extensions or sophisticated parameter types may not be fully supported by the tool.
 
 **Policy Generation: Create starter policies based on your schema**
 

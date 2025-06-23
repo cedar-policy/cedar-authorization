@@ -3,6 +3,8 @@ import fc from 'fast-check';
 import { OpenAPIV3 } from 'openapi-types';
 import { Tools } from '../src/tools'; 
 
+const cedarLib = require('@cedar-policy/cedar-wasm/nodejs');
+
 const lowerCase = 'abcdefghijklmnopqrstuvwxyz';
 const upperCase = lowerCase.toUpperCase();
 const VALID_CHARS = `-_${lowerCase}${upperCase}`.split('');
@@ -49,12 +51,22 @@ const arbAttribute = fc.letrec(tie => {
     };
 });
 
+// Cedar reserved words that cannot be used as keys
+const CEDAR_RESERVED_WORDS = [
+    'if', 'then', 'else', 'like', 'in', 'is', '__cedar',
+    'permit', 'forbid', 'when', 'unless', 'has', 'principal',
+    'action', 'resource', 'context'
+];
+
+// Custom generator for valid Cedar property names
+const arbValidCommonTypeName = fc.string({
+    unit: fc.constantFrom(...lowerCase),
+    minLength: 1,
+    maxLength: 10,
+}).filter(str => !CEDAR_RESERVED_WORDS.includes(str));
+
 const arbOpenApiSchemaRecord = fc.dictionary(
-    fc.string({
-        unit: fc.constantFrom(...lowerCase),
-        minLength: 1,
-        maxLength: 10,
-    }),
+    arbValidCommonTypeName,
     fc.oneof(
         fc.record({
             type: fc.constantFrom('object'),
@@ -129,6 +141,8 @@ describe('schema generation proptests', () => {
                     }).schemaV4;
                     const generatedCedarSchema = JSON.parse(generatedCedarSchemaStr);
                     expect(Object.keys(generatedCedarSchema['NS'].actions).length).to.equal(numActionsInApiSpec);
+                    const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
+                    expect(parseResult.type).to.equal('success');
                 }
             )
         )
@@ -185,6 +199,8 @@ describe('schema generation proptests', () => {
 
                     expect(actualCommonTypes).toStrictEqual(expectedCommonTypes);
 
+                    const parseResult = cedarLib.checkParseSchema(generatedCedarSchema);
+                    expect(parseResult.type).to.equal('success');
                 }
             )
         )
