@@ -413,6 +413,23 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             }
         });
 
+        // Assert the User CommonType is used for Users, and fields are correct
+        expect(parsedSchema[namespace].entityTypes.User).toBeDefined();
+        expect(parsedSchema[namespace].entityTypes.User?.shape).toStrictEqual({ type: 'User' });
+        expect(parsedSchema[namespace].entityTypes?.User?.memberOfTypes).toStrictEqual(['UserGroup']);
+        expect(parsedSchema[namespace].commonTypes?.User?.attributes).toStrictEqual({
+            sub: { type: 'String'},
+            email: { type: 'String'},
+            groups: {
+                element: {
+                    type: 'String'
+                },
+                type: 'Set',
+            },
+            token: { type: 'String'},
+            tokenType: { type: 'String'},
+        });
+
         // now assert on actions
         expect(parsedSchema[namespace].actions).toBeDefined();
         expect(Object.keys(parsedSchema[namespace].actions).sort()).toStrictEqual([
