@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@types/lodash": "^4.17.17",
-    "@types/node": "^20.11.24",
+    "@types/node": "^24.0.3",
     "@types/yargs": "^17.0.32",
     "fast-check": "^4.1.1",
     "openapi-types": "^12.1.3",
