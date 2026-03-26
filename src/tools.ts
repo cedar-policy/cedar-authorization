@@ -326,7 +326,7 @@ export class Tools {
                 throw new Error('OpenAPI operation parameters must have a "name", "schema", and "in" properties.');
             }
             if (!['path', 'query'].includes(paramDefn.in)) {
-                console.warn(`Found unsupported parameter of type ${paramDefn.in}, skipping...`);
+                console.warn(`Found unsupported openapi parameter of type ${paramDefn.in}, skipping...`);
                 continue;
             }
             const cedarSchemaParamToMerge: Record<string, TypeOfAttribute<string>> = {

@@ -1,6 +1,6 @@
 {
   "name": "@cedar-policy/cedar-authorization",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "JS/TS tools for authorization with the Cedar language",
   "main": "dist/index.js",
   "module": "./dist/index.mjs",
@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --pool=forks",
     "test:watch": "vitest",
     "build": "tsup"
   },
@@ -29,8 +29,9 @@
   },
   "homepage": "https://github.com/cedar-policy/express-authorization#readme",
   "dependencies": {
-    "@cedar-policy/cedar-wasm": "4.4.0",
+    "@cedar-policy/cedar-wasm": "^4.9.1",
     "lodash": "^4.17.21",
+    "vite": "^8.0.3",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
