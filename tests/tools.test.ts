@@ -2,9 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { Tools } from '../src/tools';
 import { OpenAPIV3 } from 'openapi-types';
 import { CedarOpenAPIExtension } from '../src';
-import fc from 'fast-check';
+const cedarLib = require('@cedar-policy/cedar-wasm/nodejs');
+import fs from 'fs';
+import path from 'path';
 
 describe('generateApiMappingSchemaFromOpenAPISpec', () => {
+    it('should be able to parse Trevor\'s API spec from the blog post', () =>{
+        const openApiSpec = JSON.parse(fs.readFileSync(path.join(__dirname, 'apispec.json'), 'utf-8'));
+        const namespace = 'PetStore';
+        const mappingType = 'SimpleRest';
+        const conversionResult = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
+        const parseResult = cedarLib.checkParseSchema(JSON.parse(conversionResult.schemaV4));
+        expect(parseResult.type).to.equal('success');
+    });
+
     it('should generate a schema from a simple OpenAPI spec, and support basePath', () => {
         // Create a simple OpenAPI spec for testing
         const openApiSpec: OpenAPIV3.Document<CedarOpenAPIExtension> = {
@@ -181,9 +192,9 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
         // iterate it twice to run the same test with and without a trailing slash in the url
         for (const testCase of [1, 2]) {
             if (testCase === 2 && openApiSpec.servers?.[0]) {
-                 openApiSpec.servers[0] = {
+                openApiSpec.servers[0] = {
                     url: 'http://my.cool.domain.com/api/v1'
-                 };
+                };
             }
             // Generate the schema
             const result = Tools.generateApiMappingSchemaFromOpenAPISpec({ openApiSpec, namespace, mappingType });
@@ -319,7 +330,36 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
                     },
                     Skull: {
                         type: 'boolean'
-                    }
+                    },
+                    User: {
+                        type: 'object',
+                        required: ['sub', 'email', 'groups'],
+                        properties: {
+                            sub: {
+                                type: 'string',
+                                example: '12345678-1234-1234-1234-123456789012'
+                            },
+                            email: {
+                                type: 'string',
+                                format: 'email',
+                                example: 'user@example.com'
+                            },
+                            groups: {
+                                type: 'array',
+                                items: {
+                                    type: 'string'
+                                },
+                                example: ['Administrators', 'Users']
+                            },
+                            token: {
+                                type: 'string'
+                            },
+                            tokenType: {
+                                type: 'string',
+                                enum: ['access', 'id']
+                            }
+                        }
+                    },
                 }
             }
         };
@@ -344,7 +384,8 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             'Spine',
             'T1',
             'T2',
-            'T3'
+            'T3',
+            'User'
         ]);
         expect(parsedSchema[namespace].entityTypes).toBeDefined();
         expect(Object.keys(parsedSchema[namespace].entityTypes).sort()).toStrictEqual([
@@ -372,12 +413,33 @@ describe('generateApiMappingSchemaFromOpenAPISpec', () => {
             }
         });
 
+        // Assert the User CommonType is used for Users, and fields are correct
+        expect(parsedSchema[namespace].entityTypes.User).toBeDefined();
+        expect(parsedSchema[namespace].entityTypes.User?.shape).toStrictEqual({ type: 'User' });
+        expect(parsedSchema[namespace].entityTypes?.User?.memberOfTypes).toStrictEqual(['UserGroup']);
+        expect(parsedSchema[namespace].commonTypes?.User?.attributes).toStrictEqual({
+            sub: { type: 'String'},
+            email: { type: 'String'},
+            groups: {
+                element: {
+                    type: 'String'
+                },
+                type: 'Set',
+            },
+            token: { type: 'String'},
+            tokenType: { type: 'String'},
+        });
+
         // now assert on actions
         expect(parsedSchema[namespace].actions).toBeDefined();
         expect(Object.keys(parsedSchema[namespace].actions).sort()).toStrictEqual([
             'getUsers',
         ]);
         expect(parsedSchema[namespace].actions.getUsers.appliesTo.resourceTypes).toStrictEqual(['Spine']);
+
+        // now assert that schema parses properly
+        const parseResult = cedarLib.checkParseSchema(parsedSchema);
+        expect(parseResult.type).to.equal('success');
     });
 
     it('should throw an error when OpenAPI spec is missing paths', () => {

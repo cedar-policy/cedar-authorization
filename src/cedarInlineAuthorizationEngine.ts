@@ -1,7 +1,6 @@
 import { AuthorizationCall, PolicySet, SchemaJson, ValidationCall } from "@cedar-policy/cedar-wasm";
 import { AuthorizationRequest, AuthorizationResult, AuthorizationEngine, Entity, StringifiedSchema, assertUnreachable } from "./index";
 import { Tools } from "./tools";
-import { assert } from "console";
 
 
 export interface CedarInlineAuthorizerConfiguration {
