@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/cedar-policy/express-authorization#readme",
   "dependencies": {
-    "@cedar-policy/cedar-wasm": "^4.9.1",
+    "@cedar-policy/cedar-wasm": "^4.10.0",
     "lodash": "^4.17.21",
     "vite": "^8.0.3",
     "yargs": "^18.0.0"
